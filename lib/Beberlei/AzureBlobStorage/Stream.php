@@ -74,6 +74,7 @@ class Stream
      *
      * @param string $path
      * @return BlobClient
+     * @throws BlobException
      */
     protected function getStorageClient($path = '')
     {
@@ -131,10 +132,10 @@ class Stream
     /**
      * Open the stream
      *
-     * @param  string  $path
-     * @param  string  $mode
+     * @param  string $path
+     * @param  string $mode
      * @param  integer $options
-     * @param  string  $opened_path
+     * @param  string $opened_path
      * @return boolean
      */
     public function stream_open($path, $mode, $options, &$opened_path)
@@ -158,11 +159,16 @@ class Stream
 
         // If read/append, fetch the file
         if (!$this->writeMode || strpbrk($mode, 'ra+')) {
-            $this->getStorageClient($this->fileName)->getBlob(
-                $this->getContainerName($this->fileName),
-                $this->getFileName($this->fileName),
-                $this->temporaryFileName
-            );
+            try {
+                $this->getStorageClient($this->fileName)->getBlob(
+                    $this->getContainerName($this->fileName),
+                    $this->getFileName($this->fileName),
+                    $this->temporaryFileName
+                );
+            } catch(\Exception $e)
+            {
+                return false;
+            }
         }
 
         // Open temporary file handle
@@ -190,6 +196,10 @@ class Stream
             if (!$containerExists) {
                 $this->getStorageClient($this->fileName)->createContainer(
                     $this->getContainerName($this->fileName)
+                );
+
+                $this->getStorageClient($this->fileName)->setContainerAcl(
+                    $this->getContainerName($this->fileName), BlobClient::ACL_PUBLIC_BLOB
                 );
             }
 
@@ -293,7 +303,7 @@ class Stream
     {
         $result = fflush($this->temporaryFileHandle);
 
-         // Upload the file?
+        // Upload the file?
         if ($this->writeMode) {
             // Make sure the container exists
             $containerExists = $this->getStorageClient($this->fileName)->containerExists(
@@ -337,6 +347,14 @@ class Stream
         return $this->url_stat($this->fileName, 0);
     }
 
+    public function stream_cast($castAs)
+    {
+        $read = null;
+        $write  = null;
+        $except = null;
+        return @stream_select($read, $write, $except, $castAs);
+    }
+
     /**
      * Attempt to delete the item
      *
@@ -358,8 +376,8 @@ class Stream
     /**
      * Attempt to rename the item
      *
-     * @param  string  $path_from
-     * @param  string  $path_to
+     * @param  string $path_from
+     * @param  string $path_to
      * @return boolean False
      */
     public function rename($path_from, $path_to)
@@ -398,6 +416,22 @@ class Stream
      */
     public function url_stat($path, $flags)
     {
+        if(! strpos($path, '.'))
+        {
+            $stat = [];
+            $stat['size'] = 1; //$info->Size;
+
+            // Set the modification time and last modified to the Last-Modified header.
+            $lastmodified = \utils::now(-1);
+            $stat['mtime'] = $lastmodified;
+            $stat['ctime'] = $lastmodified;
+
+            // Entry is a regular file.
+            $stat['mode'] = 0100000;
+
+            return array_values($stat) + $stat;
+        }
+
         $stat = array();
         $stat['dev'] = 0;
         $stat['ino'] = 0;
@@ -413,58 +447,63 @@ class Stream
         $stat['blksize'] = 0;
         $stat['blocks'] = 0;
 
-        $info = null;
+        // $info = [];
         try {
             $info = $this->getStorageClient($path)->getBlobInstance(
-                        $this->getContainerName($path),
-                        $this->getFileName($path)
-                    );
-            $stat['size']  = $info->Size;
-
-            // Set the modification time and last modified to the Last-Modified header.
-            $lastmodified = strtotime($info->LastModified);
-            $stat['mtime'] = $lastmodified;
-            $stat['ctime'] = $lastmodified;
-
-            // Entry is a regular file.
-            $stat['mode'] = 0100000;
-
-            return array_values($stat) + $stat;
-        } catch (BlobException $ex) {
-            // Unexisting file...
+                $this->getContainerName($path),
+                $this->getFileName($path)
+            );
+        } catch (\Exception $e)
+        {
             return false;
         }
+        $stat = [];
+        $stat['size'] = 1; //$info->Size;
+
+        // Set the modification time and last modified to the Last-Modified header.
+        $lastmodified = \utils::now(-1);
+        $stat['mtime'] = $lastmodified;
+        $stat['ctime'] = $lastmodified;
+
+        // Entry is a regular file.
+        $stat['mode'] = 0100000;
+
+        return array_values($stat) + $stat;
+//        } catch (BlobException $ex) {
+        // Unexisting file...
+//            return true;
+//        }
     }
 
     /**
      * Create a new directory
      *
-     * @param  string  $path
+     * @param  string $path
      * @param  integer $mode
      * @param  integer $options
      * @return boolean
      */
     public function mkdir($path, $mode, $options)
     {
-        if ($this->getContainerName($path) == $this->getFileName($path)) {
-            // Create container
-            try {
-                $this->getStorageClient($path)->createContainer(
-                    $this->getContainerName($path)
-                );
-                return true;
-            } catch (BlobException $ex) {
-                return false;
-            }
-        } else {
-            throw new BlobException('mkdir() with multiple levels is not supported on Windows Azure Blob Storage.');
+//        if ($this->getContainerName($path) == $this->getFileName($path)) {
+        // Create container
+        try {
+            $this->getStorageClient($path)->createContainer(
+                $this->getContainerName($path)
+            );
+            return true;
+        } catch (BlobException $ex) {
+            return false;
         }
+//        } else {
+//            throw new BlobException('mkdir() with multiple levels is not supported on Windows Azure Blob Storage.');
+//        }
     }
 
     /**
      * Remove a directory
      *
-     * @param  string  $path
+     * @param  string $path
      * @param  integer $options
      * @return boolean
      */

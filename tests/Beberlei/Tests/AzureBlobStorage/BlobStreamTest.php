@@ -25,6 +25,8 @@ class BlobStreamTest extends BlobTestCase
 
         $result = file_get_contents($fileName);
 
+        $storageClient->unregisterStreamWrapper();
+
         $this->assertEquals('Hello world!', $result);
     }
 
@@ -42,6 +44,8 @@ class BlobStreamTest extends BlobTestCase
         $fh = fopen($fileName, 'w');
         fwrite($fh, "Hello world!");
         fclose($fh);
+
+        $storageClient->unregisterStreamWrapper();
 
         $instance = $storageClient->getBlobInstance($containerName, 'test.txt');
         $this->assertEquals('test.txt', $instance->Name);
@@ -63,6 +67,8 @@ class BlobStreamTest extends BlobTestCase
         fclose($fh);
 
         unlink($fileName);
+
+        $storageClient->unregisterStreamWrapper();
 
         $result = $storageClient->listBlobs($containerName);
         $this->assertEquals(0, count($result));
@@ -86,6 +92,8 @@ class BlobStreamTest extends BlobTestCase
 
         copy($sourceFileName, $destinationFileName);
 
+        $storageClient->unregisterStreamWrapper();
+
         $instance = $storageClient->getBlobInstance($containerName, 'test2.txt');
         $this->assertEquals('test2.txt', $instance->Name);
     }
@@ -108,6 +116,8 @@ class BlobStreamTest extends BlobTestCase
 
         rename($sourceFileName, $destinationFileName);
 
+        $storageClient->unregisterStreamWrapper();
+
         $instance = $storageClient->getBlobInstance($containerName, 'test2.txt');
         $this->assertEquals('test2.txt', $instance->Name);
     }
@@ -125,6 +135,8 @@ class BlobStreamTest extends BlobTestCase
         $current = count($storageClient->listContainers());
 
         mkdir('azure://' . $containerName);
+
+        $storageClient->unregisterStreamWrapper();
 
         $after = count($storageClient->listContainers());
 
@@ -144,6 +156,8 @@ class BlobStreamTest extends BlobTestCase
 
         mkdir('azure://' . $containerName);
         rmdir('azure://' . $containerName);
+
+        $storageClient->unregisterStreamWrapper();
 
         $result = $storageClient->listContainers();
 
@@ -177,36 +191,10 @@ class BlobStreamTest extends BlobTestCase
             closedir($handle);
         }
 
+        $storageClient->unregisterStreamWrapper();
+
         $result = $storageClient->listContainers();
 
         $this->assertEquals(count($result1), count($result2));
-    }
-
-    static public function dataNestedDirectory()
-    {
-        return array(
-            array('/nested/test.txt'),
-            array('/nested1/nested2/test.txt'),
-        );
-    }
-
-    /**
-     * @dataProvider dataNestedDirectory
-     */
-    public function testNestedDirectory($file)
-    {
-        $containerName = $this->generateName();
-        $fileName = 'azure://' . $containerName . $file;
-
-        $storageClient = $this->createStorageInstance();
-        $storageClient->registerStreamWrapper();
-
-        $fh = fopen($fileName, 'w');
-        fwrite($fh, "Hello world!");
-        fclose($fh);
-
-        $result = file_get_contents($fileName);
-
-        $this->assertEquals('Hello world!', $result);
     }
 }
